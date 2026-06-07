@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nobar Platform</title>
+    <link rel="stylesheet" href="style.css?v=9">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body style="background: linear-gradient(135deg, #1a1a2e, #16213e);">
+    <div id="roomOverlay" class="room-overlay">
+        <div class="room-modal">
+            <h2>Join atau Buat Room</h2>
+            <p>Masukkan ID Room untuk mulai nobar</p>
+            <input type="text" id="roomIdInput" placeholder="Contoh: room-nobar-1">
+            <button onclick="joinRoom()">Masuk Room</button>
+        </div>
+    </div>
+
+    <div class="app-container" id="appContainer" style="display: none;">
+        
+        <div class="video-section">
+            <div class="video-wrapper">
+                <div id="loader" class="loader" style="display:none;">Memuat Video Besar...</div>
+                <video id="videoPlayer" controls width="100%">
+                    <source src="/stream-video" type="video/mp4">
+                    Browser kamu tidak mendukung pemutaran video.
+                </video>
+                <video id="screenPlayer" autoplay playsinline style="display: none;"></video>
+                <video id="preloaderVideo" style="display:none;"></video>
+            </div>
+            
+            <div class="controls-panel">
+                <h3>Host Controls (Room: <span id="displayRoomId"></span>)</h3>
+                <div class="upload-section">
+                    <input type="file" id="fileInput" accept="video/mp4,video/webm">
+                    <button onclick="uploadVideo()">Unggah & Putar</button>
+                </div>
+                <div class="stream-section">
+                    <input type="text" id="streamUrl" placeholder="Masukkan URL Video Langsung">
+                    <button onclick="playStream()">Putar URL</button>
+                    <button onclick="startScreenShare()" style="background: #F59E0B;">Share Screen</button>
+                </div>
+                <div class="resolution-section">
+                    <select id="resolutionSelect" onchange="changeResolution()">
+                        <option value="original">Original / Kualitas Tinggi</option>
+                        <option value="360p">360p (Standar / Hemat)</option>
+                        <option value="144p">144p (Terendah / Sangat Hemat)</option>
+                    </select>
+                    <button onclick="forceSync()" class="sync-btn">Force Auto-Sync</button>
+                </div>
+            </div>
+        </div> 
+        <div class="chat-section">
+            <div class="chat-header">Live Chat</div>
+            <div class="chat-messages" id="chatBox"></div>
+            
+            <div id="typingIndicator" class="typing-indicator"></div>
+            
+            <div class="reaction-bar">
+                <button onclick="sendReaction('❤️')">❤️</button>
+                <button onclick="sendReaction('�')">😍</button>
+                <button onclick="sendReaction('😡')">😡</button>
+                <button onclick="sendReaction('🥺')">🥺</button>
+                <button onclick="sendReaction('💗')">💗</button>
+                <button onclick="sendReaction('🌷')">🌷</button>
+                <button onclick="sendReaction('😴')">😴</button>
+                <button onclick="sendReaction('😎')">😎</button>
+                <button onclick="sendReaction('🥰')">🥰</button>
+                <button onclick="sendReaction('🙄')">🙄</button>
+                <button onclick="sendReaction('🥱')">🥱</button>
+                <button onclick="sendReaction('😖')">�</button>
+                <button onclick="sendReaction('😱')">😱</button>
+                <button onclick="sendReaction('😭')">😭</button>
+                <button onclick="sendReaction('🤔')">🤔</button>
+                <button onclick="sendReaction('👍🏻')">👍🏻</button>
+                <button onclick="sendReaction('👎🏻')">👎🏻</button>
+            </div>
+
+            <div class="chat-input-wrapper">
+                
+                <div id="replyPreview" class="reply-preview" style="display: none;">
+                    <div class="reply-preview-content">
+                        <span id="replyPreviewName" class="reply-preview-name"></span>
+                        <span id="replyPreviewText" class="reply-preview-text"></span>
+                    </div>
+                    <button onclick="cancelReply()" class="cancel-reply-btn">✕</button>
+                </div>
+
+                <div class="chat-input-area">
+                    <input type="text" id="usernameInput" placeholder="Nama..." value="Guest">
+                    <input type="text" id="messageInput" placeholder="Ketik pesan..." onkeypress="handleEnter(event)">
+                    <button onclick="sendMessage()">Kirim</button>
+                </div>
+            </div>
+        </div>
+        </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

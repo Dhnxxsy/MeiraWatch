@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MeiraWatch - Nobar Platform</title>
+    <link rel="stylesheet" href="style.css?v=24">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+    <!-- ===== MODAL JOIN ROOM - NETFLIX STYLE ===== -->
+    <div id="roomOverlay" class="room-overlay">
+        <div class="room-modal">
+            <!-- Logo -->
+            <div class="logo-wrapper">
+                <h1 class="meirawatch-logo">MeiraWatch</h1>
+                <div class="logo-underline"></div>
+            </div>
+            
+            <!-- Subtitle -->
+            <p class="modal-subtitle">Nonton bareng, seru bareng. Siapkan cemilanmu.</p>
+            
+            <div class="modal-body">
+                <div class="modal-input-wrapper">
+                    <div class="input-icon">👤</div>
+                    <div class="input-group">
+                        <label>Nama Kamu</label>
+                        <input type="text" id="usernameInputModal" class="modal-input" placeholder="Contoh: Raga, Meisya...">
+                    </div>
+                </div>
+                
+                <div class="modal-input-wrapper">
+                    <div class="input-icon">🔑</div>
+                    <div class="input-group">
+                        <label>Kode Room</label>
+                        <input type="text" id="roomIdInput" class="modal-input" placeholder="Contoh: malam-minggu">
+                    </div>
+                </div>
+                
+                <button onclick="joinRoom()" class="modal-btn">
+                    <span class="btn-text">Mulai Nobar</span>
+                    <span class="btn-icon">🚀</span>
+                </button>
+                
+                <!-- ===== TOMBOL SUPPORT ===== -->
+                <div class="support-trigger" id="supportTrigger" onclick="openSupportModal()">
+                    <span>☕</span>
+                    <span>Dukung Kami</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ===== MODAL SUPPORT ===== -->
+        <div id="supportModal" class="support-modal" style="display: none;">
+            <div class="support-modal-content">
+                <div class="support-header">
+                    <h2>Support MeiraWatch</h2>
+                    <p>Bantu kami tetap berjalan dan berkembang</p>
+                    <button class="support-close" onclick="closeSupportModal()">✕</button>
+                </div>
+                
+                <div class="support-body">
+                    <div class="support-methods">
+                        <div class="support-method" onclick="selectMethod('dana')" data-method="dana">
+                            <div class="method-icon">💸</div>
+                            <div class="method-name">Dana</div>
+                        </div>
+                        <div class="support-method" onclick="selectMethod('gopay')" data-method="gopay">
+                            <div class="method-icon">🟢</div>
+                            <div class="method-name">GoPay</div>
+                        </div>
+                        <div class="support-method" onclick="selectMethod('shopeepay')" data-method="shopeepay">
+                            <div class="method-icon">🟠</div>
+                            <div class="method-name">ShopeePay</div>
+                        </div>
+                        <div class="support-method" onclick="selectMethod('seabank')" data-method="seabank">
+                            <div class="method-icon">💙</div>
+                            <div class="method-name">SeaBank</div>
+                        </div>
+                    </div>
+                    
+                    <div id="paymentDetails" class="payment-details" style="display: none;">
+                        <div class="payment-info">
+                            <div class="payment-label">Nomor Tujuan</div>
+                            <div class="payment-number" id="paymentNumber">-</div>
+                            <button class="copy-btn" onclick="copyPaymentNumber()">📋 Salin</button>
+                        </div>
+                        <div class="payment-info">
+                            <div class="payment-label">Atas Nama</div>
+                            <div class="payment-name" id="paymentName">Raga Kalas Ramadhan</div>
+                        </div>
+                        <div class="payment-info">
+                            <div class="payment-label">Nominal</div>
+                            <div class="payment-amount">
+                                <input type="number" id="supportAmount" placeholder="Masukkan nominal" min="1000" step="1000">
+                                <span>IDR</span>
+                            </div>
+                        </div>
+                        <div class="payment-info">
+                            <div class="payment-label">Instruksi</div>
+                            <div class="payment-instruction" id="paymentInstruction">
+                                Transfer ke nomor di atas, lalu konfirmasi ke admin.
+                            </div>
+                        </div>
+                        
+                        <button class="confirm-btn" onclick="confirmSupport()">
+                            ✅ Saya Sudah Transfer
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- ===== MODAL NOTIFIKASI SUKSES ===== -->
+        <div id="successModal" class="success-modal" style="display: none;">
+            <div class="success-modal-content">
+                <div class="success-header">
+                    <div class="success-icon">🎉</div>
+                    <h2>Terima Kasih!</h2>
+                    <p>Dukungan Anda sangat berarti bagi kami</p>
+                    <button class="success-close" onclick="closeSuccessModal()">✕</button>
+                </div>
+                
+                <div class="success-body">
+                    <div class="success-details">
+                        <div class="success-detail-item">
+                            <span class="detail-label">💳 Metode</span>
+                            <span class="detail-value" id="successMethod">-</span>
+                        </div>
+                        <div class="success-detail-item">
+                            <span class="detail-label">💰 Nominal</span>
+                            <span class="detail-value" id="successAmount">-</span>
+                        </div>
+                        <div class="success-detail-item">
+                            <span class="detail-label">📞 Nomor Tujuan</span>
+                            <span class="detail-value" id="successNumber">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="success-instruction">
+                        <p>Silakan transfer ke nomor di atas.</p>
+                        <p class="instruction-note">Konfirmasi ke admin setelah transfer.</p>
+                    </div>
+                    
+                    <button class="success-btn" onclick="closeSuccessModal()">
+                        ✅ Saya Mengerti
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== APP CONTAINER ===== -->
+    <div class="app-container" id="appContainer" style="display: none;">
+        <div class="video-section">
+            <div class="video-wrapper">
+                <div id="loader" class="loader" style="display:none;">Memuat Video...</div>
+                <div id="bufferingIndicator" class="buffering-indicator">
+                    <div class="spinner"></div>
+                </div>
+                <video id="videoPlayer" controls width="100%">
+                    <source src="/stream-video" type="video/mp4">
+                    Browser kamu tidak mendukung pemutaran video.
+                </video>
+                <video id="screenPlayer" autoplay playsinline style="display: none;"></video>
+                <video id="preloaderVideo" style="display:none;"></video>
+            </div>
+            <div class="controls-panel">
+                <h3>
+                    <span>🎬 Room: <span id="displayRoomId"></span></span>
+                    <span style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <span id="hostLabel" style="font-size: 11px; color: #fbbf24; font-weight: 500;">👑 Host: </span>
+                        <span id="userCounter" style="font-size: 13px; color: #60a5fa;">
+                            👥 <span id="userCount">0</span> online
+                        </span>
+                    </span>
+                </h3>
+                <div class="upload-section">
+                    <input type="file" id="fileInput" accept="video/mp4,video/webm">
+                    <button onclick="uploadVideo()">Unggah & Putar</button>
+                </div>
+                <div class="stream-section">
+                    <input type="text" id="streamUrl" placeholder="Masukkan URL Video Langsung">
+                    <button onclick="playStream()">Putar URL</button>
+                    <button onclick="startScreenShare()" style="background: #F59E0B;">Share Screen</button>
+                </div>
+                <div class="resolution-section">
+                    <select id="resolutionSelect" onchange="changeResolution()">
+                        <option value="original">Original / Kualitas Tinggi</option>
+                        <option value="360p">360p (Standar / Hemat)</option>
+                        <option value="144p">144p (Terendah / Sangat Hemat)</option>
+                    </select>
+                    <button onclick="forceSync()" class="sync-btn">Force Auto-Sync</button>
+                </div>
+            </div>
+        </div>
+        <div class="chat-section">
+            <div class="chat-header">💬 Live Chat</div>
+            <div class="chat-messages" id="chatBox"></div>
+            <div id="typingIndicator" class="typing-indicator"></div>
+            <div class="reaction-bar">
+                <button onclick="sendReaction('❤️')">❤️</button>
+                <button onclick="sendReaction('😍')">😍</button>
+                <button onclick="sendReaction('😡')">😡</button>
+                <button onclick="sendReaction('🥺')">🥺</button>
+                <button onclick="sendReaction('💗')">💗</button>
+                <button onclick="sendReaction('🌷')">🌷</button>
+                <button onclick="sendReaction('😴')">😴</button>
+                <button onclick="sendReaction('😎')">😎</button>
+                <button onclick="sendReaction('🥰')">🥰</button>
+                <button onclick="sendReaction('🙄')">🙄</button>
+                <button onclick="sendReaction('🥱')">🥱</button>
+                <button onclick="sendReaction('😖')">😖</button>
+                <button onclick="sendReaction('😱')">😱</button>
+                <button onclick="sendReaction('😭')">😭</button>
+                <button onclick="sendReaction('🤔')">🤔</button>
+                <button onclick="sendReaction('👍🏻')">👍🏻</button>
+                <button onclick="sendReaction('👎🏻')">👎🏻</button>
+            </div>
+            <div class="chat-input-wrapper">
+                <div id="replyPreview" class="reply-preview" style="display: none;">
+                    <div class="reply-preview-content">
+                        <span id="replyPreviewName" class="reply-preview-name"></span>
+                        <span id="replyPreviewText" class="reply-preview-text"></span>
+                    </div>
+                    <button onclick="cancelReply()" class="cancel-reply-btn">✕</button>
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="usernameInput" placeholder="Nama..." value="Guest">
+                    <input type="text" id="messageInput" placeholder="Ketik pesan..." onkeypress="handleEnter(event)">
+                    <button id="sendButton" onclick="handleSend()">Kirim</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
