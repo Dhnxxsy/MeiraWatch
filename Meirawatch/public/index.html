@@ -36,6 +36,19 @@
                 </div>
 
                 <div class="bioskop-body">
+                    <!-- Google Login -->
+                    <div class="google-login-container" style="margin-bottom: 20px; text-align: center;">
+                        <p style="color: var(--text-muted); font-size: 13px;">Login diperlukan untuk sinkronisasi Google Drive bebas limit:</p>
+                        <div id="g_id_onload"
+                             data-client_id="842530028540-76odbiqlit31u8set4j5gfh681r3o3sj.apps.googleusercontent.com"
+                             data-context="signin"
+                             data-ux_mode="popup"
+                             data-callback="handleCredentialResponse"
+                             data-auto_select="false">
+                        </div>
+                        <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="filled_blue" data-text="signin_with" data-size="large"></div>
+                    </div>
+
                     <!-- Movie Info -->
                     <div class="movie-info-card">
                         <div class="movie-poster">
@@ -468,6 +481,10 @@
 
                 </div>
 
+                <div id="youtubeContainer" style="display: none; width: 100%; height: 100%; aspect-ratio: 16/9;">
+                    <div id="youtubePlayer"></div>
+                </div>
+
                 <video id="videoPlayer" controls width="100%" preload="auto" playsinline>
 
                     <source src="/stream-video" type="video/mp4">
@@ -509,16 +526,20 @@
 
                 <div class="stream-section">
 
-                    <input type="text" id="streamUrl" placeholder="Link Google Drive atau URL Video Langsung">
+                    <input type="text" id="streamUrl" placeholder="Link Google Drive atau YouTube">
 
-                    <button onclick="playStream()">▶ Putar</button>
+                    <button onclick="changeVideo()">▶ Putar</button>
 
                     <button onclick="startScreenShare()" style="background: #F59E0B;">Share Screen</button>
+
+                    <button id="btnResetVideo" class="btn-reset" onclick="hardResetPlayer()">
+                        🔄 Reset Player
+                    </button>
 
                 </div>
 
                 <div class="gdrive-hint" style="font-size:11px; color: var(--text-muted, #888); margin-top: 4px; padding: 0 2px;">
-                    💡 Tip: Tempel link Google Drive (<code>drive.google.com/file/d/…</code>) — video diputar langsung dari Google, tanpa bebankan server.
+                    💡 Tip: Tempel link Google Drive (<code>drive.google.com/file/d/…</code>) atau YouTube — video diputar langsung, tanpa bebankan server.
                     Pastikan file di-set <b>Anyone with the link</b>.
                 </div>
 
@@ -682,7 +703,7 @@
     </div>
 
 
-
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="script.js"></script>
 <div id="speedSyncInfo">Initializing...</div>
     </div>
