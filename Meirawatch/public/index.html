@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+
+<html lang="id" data-theme="dark">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>MeiraWatch - Nobar Platform</title>
+
+    <link rel="stylesheet" href="style.css?v=28">
+
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+</head>
+
+<body>
+
+    <!-- ===== MODAL JOIN ROOM - NETFLIX STYLE ===== -->
+
+    <div id="roomOverlay" class="room-overlay">
+        <div class="bioskop-modal">
+
+            <!-- Step 1: Pilih Film & Studio -->
+            <div id="step1" class="bioskop-step active">
+                <div class="bioskop-header">
+                    <div class="bioskop-logo">
+                        <span class="logo-icon">🎬</span>
+                        <span class="logo-text">MeiraWatch</span>
+                    </div>
+                    <div class="bioskop-subtitle">Pilih film, pilih kursi, nikmati tayangan bersama.</div>
+                </div>
+
+                <div class="bioskop-body">
+                    <!-- Google Login -->
+                    <div class="google-login-container" style="margin-bottom: 20px; text-align: center;">
+                        <p style="color: var(--text-muted); font-size: 13px;">Login diperlukan untuk sinkronisasi Google Drive bebas limit:</p>
+                        <div id="g_id_onload"
+                             data-client_id="842530028540-76odbiqlit31u8set4j5gfh681r3o3sj.apps.googleusercontent.com"
+                             data-context="signin"
+                             data-ux_mode="popup"
+                             data-callback="handleCredentialResponse"
+                             data-auto_select="false">
+                        </div>
+                        <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="filled_blue" data-text="signin_with" data-size="large"></div>
+                    </div>
+
+                    <!-- Movie Info -->
+                    <div class="movie-info-card">
+                        <div class="movie-poster">
+                            <img id="moviePosterImg" src="" alt="Poster Film" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:none;">
+                            <div id="posterPlaceholder" class="poster-placeholder">🎥</div>
+                        </div>
+                        <div class="movie-details">
+                            <div class="movie-title">Pangku</div>
+                            <div class="movie-meta">
+                                <span class="movie-rating">⭐ 6.7</span>
+                                <span class="movie-genre">Horror | 18+</span>
+                            </div>
+                            <div class="movie-schedule">
+                                <span class="schedule-badge">🎫 Hari Ini</span>
+                                <span class="schedule-badge">⏰ 20:00 - 22:30</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bioskop-field">
+                        <label>👤 Nama Penonton</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="usernameInputModal" class="bioskop-input" placeholder="Masukkan nama kamu..." value="">
+                            <span class="input-icon-right">✏️</span>
+                        </div>
+                        <div class="username-profanity-warn" id="usernameProfanityWarn">Nama mengandung kata tidak pantas</div>
+                    </div>
+
+                    <div class="bioskop-field">
+                        <label>🎫 Nomor Studio</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="roomIdInput" class="bioskop-input" placeholder="Contoh: Studio 1, Studio 2..." value="">
+                            <span class="input-icon-right">🔑</span>
+                        </div>
+                    </div>
+
+                    <div class="bioskop-actions">
+                        <button id="nextToSeatBtn" class="bioskop-btn primary" onclick="goToSeatSelection()">
+                            <span class="btn-text">Pilih Kursi</span>
+                            <span class="btn-icon">🎫</span>
+                        </button>
+                    </div>
+
+                    <div class="support-trigger" id="supportTrigger" onclick="openSupportModal()">
+                        <span>☕</span>
+                        <span>Dukung Kami</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Pilih Kursi -->
+            <div id="step2" class="bioskop-step">
+                <div class="bioskop-header">
+                    <div class="bioskop-back" onclick="goBackToStep1()">
+                        <span>‹</span>
+                    </div>
+                    <div class="bioskop-title">Pilih Kursi</div>
+                    <div class="bioskop-info">
+                        <span class="seat-count" id="selectedSeatCount">0</span>
+                        <span class="seat-label">Kursi</span>
+                        <span class="total-price" id="totalPrice">Rp 0</span>
+                    </div>
+                </div>
+
+                <div class="bioskop-body">
+                    <!-- Cinema Screen -->
+                    <div class="cinema-screen">
+                        <div class="screen-curve"></div>
+                        <div class="screen-label">LAYAR</div>
+                    </div>
+
+                    <!-- Seat Legend -->
+                    <div class="seat-legend">
+                        <div class="legend-item">
+                            <div class="legend-box available"></div>
+                            <span>Tersedia</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-box selected"></div>
+                            <span>Dipilih</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-box taken"></div>
+                            <span>Terisi</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-box vip"></div>
+                            <span>VIP</span>
+                        </div>
+                    </div>
+
+                    <!-- Seat Grid -->
+                    <div class="seat-grid-container">
+                        <div class="seat-grid" id="seatGrid">
+                            <!-- Grid akan diisi JavaScript -->
+                        </div>
+                    </div>
+
+                    <div class="bioskop-actions">
+                        <button id="confirmSeatBtn" class="bioskop-btn primary" onclick="goToPayment()">
+                            <span class="btn-text">Lanjut ke Pembayaran</span>
+                            <span class="btn-icon">💳</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Pembayaran -->
+            <div id="step3" class="bioskop-step">
+                <div class="bioskop-header">
+                    <div class="bioskop-back" onclick="goBackToStep2()">
+                        <span>‹</span>
+                    </div>
+                    <div class="bioskop-title">Pembayaran</div>
+                    <div class="bioskop-info">
+                        <span class="total-price" id="paymentTotal">Rp 0</span>
+                    </div>
+                </div>
+
+                <div class="bioskop-body">
+                    <div class="payment-summary">
+                        <div class="payment-item">
+                            <span>Kursi</span>
+                            <span id="paymentSeat">-</span>
+                        </div>
+                        <div class="payment-item">
+                            <span>Harga Tiket</span>
+                            <span id="paymentPrice">Rp 0</span>
+                        </div>
+                        <div class="payment-item total">
+                            <span>Total</span>
+                            <span id="paymentTotalAmount">Rp 0</span>
+                        </div>
+                    </div>
+
+                    <div class="bioskop-field">
+                        <label>💳 Metode Pembayaran</label>
+                        <div class="payment-methods">
+                            <div class="payment-method" onclick="selectPaymentMethod('dana')" data-method="dana">
+                                <span class="method-icon">💸</span>
+                                <span class="method-name">DANA</span>
+                            </div>
+                            <div class="payment-method" onclick="selectPaymentMethod('gopay')" data-method="gopay">
+                                <span class="method-icon">🟢</span>
+                                <span class="method-name">GoPay</span>
+                            </div>
+                            <div class="payment-method" onclick="selectPaymentMethod('shopeepay')" data-method="shopeepay">
+                                <span class="method-icon">🟠</span>
+                                <span class="method-name">ShopeePay</span>
+                            </div>
+                            <div class="payment-method" onclick="selectPaymentMethod('seabank')" data-method="seabank">
+                                <span class="method-icon">💙</span>
+                                <span class="method-name">SeaBank</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bioskop-actions">
+                        <button id="payBtn" class="bioskop-btn primary" onclick="processPayment()" disabled>
+                            <span class="btn-text">Bayar Sekarang</span>
+                            <span class="btn-icon">💳</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4: Tiket Digital -->
+            <div id="step4" class="bioskop-step">
+                <div class="bioskop-header">
+                    <div class="bioskop-title">🎟️ Tiket Digital</div>
+                </div>
+
+                <div class="bioskop-body">
+                    <div class="digital-ticket" id="digitalTicket">
+                        <!-- Akan diisi JavaScript -->
+                    </div>
+
+                    <template id="ticket-xxi-template">
+                        <div class="ticket-xxi">
+                            <div class="ticket-xxi-header">
+                                <div class="ticket-xxi-cinema">PLAZA SENAYAN</div>
+                                <div class="ticket-xxi-sub">CINEMA XXI</div>
+                            </div>
+                            <div class="ticket-xxi-body">
+                                <div class="ticket-xxi-left">
+                                    <div class="ticket-xxi-row"><div class="ticket-xxi-label">DATE</div><div class="ticket-xxi-value">-</div></div>
+                                    <div class="ticket-xxi-row"><div class="ticket-xxi-label">TIME</div><div class="ticket-xxi-value">-</div></div>
+                                    <div class="ticket-xxi-row"><div class="ticket-xxi-label">ROW</div><div class="ticket-xxi-value">-</div></div>
+                                    <div class="ticket-xxi-row"><div class="ticket-xxi-label">SEAT</div><div class="ticket-xxi-value">-</div></div>
+                                    <div class="ticket-xxi-row"><div class="ticket-xxi-label">THEATRE</div><div class="ticket-xxi-value">-</div></div>
+                                </div>
+                                <div class="ticket-xxi-right">
+                                    <div class="ticket-xxi-movie-title">NOBAR BERSAMA</div>
+                                    <div class="ticket-xxi-movie-sub">CATATAN SI BOY</div>
+                                </div>
+                            </div>
+                            <div class="ticket-xxi-bottom">
+                                <div class="ticket-xxi-price"><div class="ticket-xxi-label">PRICE</div><div class="ticket-xxi-value">-</div></div>
+                                <div class="ticket-xxi-barcode">||| ||| ||| ||| |||</div>
+                            </div>
+                            <div class="ticket-xxi-footer">TERIMA KASIH TELAH MEMILIH MEIRAWATCH</div>
+                        </div>
+                    </template>
+
+                    <div class="bioskop-actions">
+                        <button id="enterRoomBtn" class="bioskop-btn primary" onclick="enterRoom()">
+                            <span class="btn-text">🎬 Masuk ke Theater</span>
+                            <span class="btn-icon">🎬</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        
+
+        <!-- ===== MODAL SUPPORT ===== -->
+
+        <div id="supportModal" class="support-modal" style="display: none;">
+
+            <div class="support-modal-content">
+
+                <div class="support-header">
+
+                    <h2>Support MeiraWatch</h2>
+
+                    <p>Bantu kami tetap berjalan dan berkembang</p>
+
+                    <button class="support-close" onclick="closeSupportModal()">✕</button>
+
+                </div>
+
+                
+
+                <div class="support-body">
+
+                    <div class="support-methods">
+
+                        <div class="support-method" onclick="selectMethod('dana')" data-method="dana">
+
+                            <div class="method-icon">💸</div>
+
+                            <div class="method-name">Dana</div>
+
+                        </div>
+
+                        <div class="support-method" onclick="selectMethod('gopay')" data-method="gopay">
+
+                            <div class="method-icon">🟢</div>
+
+                            <div class="method-name">GoPay</div>
+
+                        </div>
+
+                        <div class="support-method" onclick="selectMethod('shopeepay')" data-method="shopeepay">
+
+                            <div class="method-icon">🟠</div>
+
+                            <div class="method-name">ShopeePay</div>
+
+                        </div>
+
+                        <div class="support-method" onclick="selectMethod('seabank')" data-method="seabank">
+
+                            <div class="method-icon">💙</div>
+
+                            <div class="method-name">SeaBank</div>
+
+                        </div>
+
+                    </div>
+
+                    
+
+                    <div id="paymentDetails" class="payment-details" style="display: none;">
+
+                        <div class="payment-info">
+
+                            <div class="payment-label">Nomor Tujuan</div>
+
+                            <div class="payment-number" id="paymentNumber">-</div>
+
+                            <button class="copy-btn" onclick="copyPaymentNumber()">📋 Salin</button>
+
+                        </div>
+
+                        <div class="payment-info">
+
+                            <div class="payment-label">Atas Nama</div>
+
+                            <div class="payment-name" id="paymentName">Raga Kalas Ramadhan</div>
+
+                        </div>
+
+                        <div class="payment-info">
+
+                            <div class="payment-label">Nominal</div>
+
+                            <div class="payment-amount">
+
+                                <input type="number" id="supportAmount" placeholder="Masukkan nominal" min="1000" step="1000">
+
+                                <span>IDR</span>
+
+                            </div>
+
+                        </div>
+
+                        <div class="payment-info">
+
+                            <div class="payment-label">Instruksi</div>
+
+                            <div class="payment-instruction" id="paymentInstruction">
+
+                                Transfer ke nomor di atas, lalu konfirmasi ke admin.
+
+                            </div>
+
+                        </div>
+
+                        
+
+                        <button class="confirm-btn" onclick="confirmSupport()">
+
+                            ✅ Saya Sudah Transfer
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- ===== MODAL NOTIFIKASI SUKSES ===== -->
+
+        <div id="successModal" class="success-modal" style="display: none;">
+
+            <div class="success-modal-content">
+
+                <div class="success-header">
+
+                    <div class="success-icon">🎉</div>
+
+                    <h2>Terima Kasih!</h2>
+
+                    <p>Dukungan Anda sangat berarti bagi kami</p>
+
+                    <button class="success-close" onclick="closeSuccessModal()">✕</button>
+
+                </div>
+
+                
+
+                <div class="success-body">
+
+                    <div class="success-details">
+
+                        <div class="success-detail-item">
+
+                            <span class="detail-label">💳 Metode</span>
+
+                            <span class="detail-value" id="successMethod">-</span>
+
+                        </div>
+
+                        <div class="success-detail-item">
+
+                            <span class="detail-label">💰 Nominal</span>
+
+                            <span class="detail-value" id="successAmount">-</span>
+
+                        </div>
+
+                        <div class="success-detail-item">
+
+                            <span class="detail-label">📞 Nomor Tujuan</span>
+
+                            <span class="detail-value" id="successNumber">-</span>
+
+                        </div>
+
+                    </div>
+
+                    
+
+                    <div class="success-instruction">
+
+                        <p>Silakan transfer ke nomor di atas.</p>
+
+                        <p class="instruction-note">Konfirmasi ke admin setelah transfer.</p>
+
+                    </div>
+
+                    
+
+                    <button class="success-btn" onclick="closeSuccessModal()">
+
+                        ✅ Saya Mengerti
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- ===== APP CONTAINER ===== -->
+
+    <div class="app-container" id="appContainer" style="display: none;">
+
+        <div class="video-section">
+
+            <div class="video-wrapper">
+
+                <div id="loader" class="loader" style="display:none;">Memuat Video...</div>
+
+                <div id="bufferingIndicator" class="buffering-indicator">
+
+                    <div class="spinner"></div>
+
+                </div>
+
+                <div id="youtubeContainer" style="display: none; width: 100%; height: 100%; aspect-ratio: 16/9;">
+                    <div id="youtubePlayer"></div>
+                </div>
+
+                <video id="videoPlayer" controls width="100%" preload="auto" playsinline>
+
+                    <source src="/stream-video" type="video/mp4">
+
+                    Browser kamu tidak mendukung pemutaran video.
+
+                </video>
+
+                <video id="screenPlayer" autoplay playsinline style="display: none;"></video>
+
+                <video id="preloaderVideo" style="display:none;"></video>
+
+            </div>
+
+            <div class="controls-panel">
+
+                <h3>
+
+                    <span>🎬 Room: <span id="displayRoomId"></span></span>
+
+                    <span style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+
+                        <span id="hostLabel" style="font-size: 11px; color: #fbbf24; font-weight: 500;">👑 Host: </span>
+
+                        <span id="userCounter" style="font-size: 13px; color: #60a5fa;">
+
+                            👥 <span id="userCount">0</span> online
+
+                        </span>
+
+                    </span>
+
+                </h3>
+
+                <div class="upload-section">
+                    <input type="file" id="fileInput" accept="video/mp4,video/webm" onchange="uploadVideo()">
+                    <button onclick="document.getElementById('fileInput').click()" style="background: var(--accent);">Unggah Video</button>
+                </div>
+
+                <div class="stream-section">
+
+                    <input type="text" id="streamUrl" placeholder="Link Google Drive atau YouTube">
+
+                    <button onclick="changeVideo()">▶ Putar</button>
+
+                    <button onclick="startScreenShare()" style="background: #F59E0B;">Share Screen</button>
+
+                    <button id="btnResetVideo" class="btn-reset" onclick="hardResetPlayer()">
+                        🔄 Reset Player
+                    </button>
+
+                </div>
+
+                <div class="gdrive-hint" style="font-size:11px; color: var(--text-muted, #888); margin-top: 4px; padding: 0 2px;">
+                    💡 Tip: Tempel link Google Drive (<code>drive.google.com/file/d/…</code>) atau YouTube — video diputar langsung, tanpa bebankan server.
+                    Pastikan file di-set <b>Anyone with the link</b>.
+                </div>
+
+                
+
+                <!-- ===== TOMBOL LOCK/UNLOCK USERNAME ===== -->
+
+                <div class="lock-section">
+
+                    <button id="lockUsernameBtn" onclick="toggleUsernameLock()" class="lock-btn" style="display: none; pointer-events: auto !important; position: relative; z-index: 1000;">
+
+                        🔓 Buka Kunci Nama
+
+                    </button>
+
+                </div>
+
+                
+
+                <!-- ===== TOMBOL BROADCAST ===== -->
+
+                <div class="broadcast-section" style="display: none;">
+
+                    <div class="broadcast-input-group">
+
+                        <input type="text" id="broadcastInput" placeholder="Ketik pesan broadcast..." maxlength="200">
+
+                        <button onclick="sendBroadcast()" class="broadcast-btn">📢 Broadcast</button>
+
+                    </div>
+
+                </div>
+
+                
+
+                <!-- ===== DAFTAR PESERTA (Untuk Kick & Transfer Host) ===== -->
+
+                <div class="participants-section" style="display: none;">
+
+                    <div class="participants-header">
+
+                        <span>👥 Peserta Online</span>
+
+                        <span class="participant-count" id="participantCount">0</span>
+
+                    </div>
+
+                    <div class="participants-list" id="participantsList">
+
+                        <!-- Daftar peserta akan diisi oleh JavaScript -->
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+        
+
+        <!-- ===== CHAT SECTION ===== -->
+
+        <div class="chat-section">
+
+            <div class="chat-header">💬 Live Chat</div>
+
+            <div class="chat-messages" id="chatBox"></div>
+
+            <div id="typingIndicator" class="typing-indicator"></div>
+
+            <div class="reaction-bar">
+
+                <button onclick="sendReaction('❤️')">❤️</button>
+
+                <button onclick="sendReaction('😍')">😍</button>
+
+                <button onclick="sendReaction('😡')">😡</button>
+
+                <button onclick="sendReaction('🥺')">🥺</button>
+
+                <button onclick="sendReaction('💗')">💗</button>
+
+                <button onclick="sendReaction('🌷')">🌷</button>
+
+                <button onclick="sendReaction('😴')">😴</button>
+
+                <button onclick="sendReaction('😎')">😎</button>
+
+                <button onclick="sendReaction('🥰')">🥰</button>
+
+                <button onclick="sendReaction('🙄')">🙄</button>
+
+                <button onclick="sendReaction('🥱')">🥱</button>
+
+                <button onclick="sendReaction('😖')">😖</button>
+
+                <button onclick="sendReaction('😱')">😱</button>
+
+                <button onclick="sendReaction('😭')">😭</button>
+
+                <button onclick="sendReaction('🤔')">🤔</button>
+
+                <button onclick="sendReaction('👍🏻')">👍🏻</button>
+
+                <button onclick="sendReaction('👎🏻')">👎🏻</button>
+
+            </div>
+
+            <div class="chat-input-wrapper">
+
+                <div id="replyPreview" class="reply-preview" style="display: none;">
+
+                    <div class="reply-preview-content">
+
+                        <span id="replyPreviewName" class="reply-preview-name"></span>
+
+                        <span id="replyPreviewText" class="reply-preview-text"></span>
+
+                    </div>
+
+                    <button onclick="cancelReply()" class="cancel-reply-btn">✕</button>
+
+                </div>
+
+                <div class="chat-input-area">
+
+                    <input type="text" id="usernameInput" placeholder="Nama..." value="Guest">
+
+                    <input type="text" id="messageInput" placeholder="Ketik pesan..." onkeypress="handleEnter(event)">
+
+                    <button id="sendButton" onclick="handleSend()">Kirim</button>
+
+                </div>
+                <div class="profanity-warn" id="profanityWarn">Pesan mengandung kata tidak pantas</div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- ===== BROADCAST NOTIFICATION (Dynamic Island Style) ===== -->
+
+    <div id="broadcastNotification" class="broadcast-notification">
+
+        <div class="broadcast-icon">📢</div>
+
+        <div class="broadcast-content">
+
+            <div class="broadcast-title">Pesan dari Host</div>
+
+            <div class="broadcast-message" id="broadcastMessage">Pesan broadcast akan muncul di sini</div>
+
+        </div>
+
+        <button class="broadcast-close" onclick="closeBroadcast()">✕</button>
+
+    </div>
+
+
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="script.js"></script>
+<div id="speedSyncInfo">Initializing...</div>
+    </div>
+<div class="sync-monitor-content">
+            <div>
+                <span class="sync-monitor-label">Status:</span>
+                <span id="syncStatus" class="sync-status-synced">
+                    <span class="sync-indicator sync-indicator-synced"></span>Synced
+                </span>
+            </div>
+            <div>
+                <span class="sync-monitor-label">Video Time:</span>
+                <span id="videoTime" class="sync-monitor-value">0.00s</span>
+            </div>
+            <div>
+                <span class="sync-monitor-label">Host Time:</span>
+                <span id="hostTime" class="sync-monitor-value">0.00s</span>
+            </div>
+            <div>
+                <span class="sync-monitor-label">Drift:</span>
+                <span id="timeDrift" class="sync-monitor-value">0.00s</span>
+            </div>
+            <div>
+                <span class="sync-monitor-label">Latency:</span>
+                <span id="networkLatency" class="sync-monitor-value">0ms</span>
+            </div>
+            <div>
+                <span class="sync-monitor-label">Playback Rate:</span>
+                <span id="playbackRate" class="sync-monitor-value">1.00x</span>
+            </div>
+            <div>
+                <span class="sync-monitor-label">Sync Interval:</span>
+                <span id="syncInterval" class="sync-monitor-value">2000ms</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simple Sync Monitor -->
+    <div id="syncMonitorSimple" style="
+        position: fixed; bottom: 60px; right: 10px;
+        background: rgba(0,0,0,0.85); color: white;
+        padding: 10px 14px; font-family: monospace; font-size: 11px;
+        border-radius: 8px; z-index: 1000; display: none; min-width: 200px;
+    ">
+        <div style="color:#60a5fa; font-weight:bold; margin-bottom:4px;">📊 Sync Monitor</div>
+        <div>Drift: <span id="smDrift" style="color:#4ade80">0.000s</span></div>
+        <div>Rate: <span id="smRate" style="color:#4ade80">1.000x</span></div>
+        <div>Buffer: <span id="smBuffer" style="color:#4ade80">0.0s</span></div>
+        <div>Latency: <span id="smLatency" style="color:#4ade80">0ms</span></div>
+    </div>
+    <script>
+    setInterval(() => {
+        const el = document.getElementById('syncMonitorSimple');
+        if (!el || el.style.display === 'none') return;
+        const v = document.getElementById('videoPlayer');
+        if (!v) return;
+        const drift = typeof syncEngine !== 'undefined' ? (syncEngine.hostTime - v.currentTime) : 0;
+        const latency = typeof syncEngine !== 'undefined' ? syncEngine.avgLatency : 0;
+        let bufAhead = 0;
+        if (v.buffered.length > 0) {
+            bufAhead = Math.max(0, v.buffered.end(v.buffered.length - 1) - v.currentTime);
+        }
+        document.getElementById('smDrift').textContent = drift.toFixed(3) + 's';
+        document.getElementById('smRate').textContent = v.playbackRate.toFixed(3) + 'x';
+        document.getElementById('smBuffer').textContent = bufAhead.toFixed(1) + 's';
+        document.getElementById('smLatency').textContent = latency.toFixed(0) + 'ms';
+        const driftEl = document.getElementById('smDrift');
+        driftEl.style.color = Math.abs(drift) < 0.15 ? '#4ade80' : Math.abs(drift) < 0.5 ? '#fbbf24' : '#ef4444';
+    }, 500);
+
+    </script>
+
+</body>
+
+</html>
