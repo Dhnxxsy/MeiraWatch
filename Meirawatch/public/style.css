@@ -1458,6 +1458,22 @@ button:hover {
     background: #059669;
 }
 
+.btn-reset {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-top: 10px;
+    transition: background 0.3s;
+}
+
+.btn-reset:hover {
+    background-color: #dc2626;
+}
+
 /* =========================================
    LOCK/UNLOCK USERNAME
    ========================================= */
