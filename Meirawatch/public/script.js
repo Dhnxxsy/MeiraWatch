@@ -90,11 +90,27 @@ function onYouTubeIframeAPIReady() {
     console.log("✅ YouTube Iframe API Ready");
 }
 
-// Fungsi ekstrak ID YouTube dari Link
+// ==========================================
+// 1. FUNGSI EKSTRAKSI URL (DIPERKUAT)
+// ==========================================
 function extractYouTubeId(url) {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
+}
+
+function extractDriveFileId(url) {
+    // Menangkap ID dari link drive biasa (Host)
+    const m1 = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m1) return m1[1];
+    // Menangkap ID dari link parameter id=
+    const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m2) return m2[1];
+    // Menangkap ID jika URL sudah menjadi googleapis
+    const m3 = url.match(/googleapis\.com\/drive\/v3\/files\/([a-zA-Z0-9_-]+)/);
+    if (m3) return m3[1];
+    
+    return null;
 }
 
 // Fungsi untuk memecah data JWT dari Google
@@ -981,15 +997,26 @@ async function resolveAndLoadVideo(rawUrl, autoPlay = true) {
 }
 
 // ==========================================
-// 3. MESIN PEMUTAR UNIVERSAL (DRIVE & YOUTUBE)
+// 2. MESIN PEMUTAR UNIVERSAL (DRIVE & YOUTUBE)
 // ==========================================
 function loadVideoUrl(url) {
+    console.log("🎬 Memuat video:", url);
     const ytId = extractYouTubeId(url);
     const driveId = extractDriveFileId(url);
+    
     const videoEl = document.getElementById('videoPlayer');
     const ytContainer = document.getElementById('youtubeContainer');
+    
+    // Bersihkan status pemutar sebelum memuat baru
+    if (videoEl) {
+        videoEl.pause();
+        videoEl.style.display = 'none';
+        videoEl.removeAttribute('src'); 
+    }
+    if (ytContainer) {
+        ytContainer.style.display = 'none';
+    }
 
-    // Matikan indikator loading nyangkut
     const loader = document.getElementById('loader');
     const buffering = document.getElementById('bufferingIndicator');
     if (loader) loader.style.display = 'none';
@@ -998,41 +1025,92 @@ function loadVideoUrl(url) {
     if (ytId) {
         // --- MODE YOUTUBE ---
         isYouTube = true;
-        videoEl.style.display = 'none';
-        videoEl.pause();
         if (ytContainer) ytContainer.style.display = 'block';
+
         if (ytPlayer && ytReady) {
             ytPlayer.loadVideoById(ytId);
+        } else if (ytReady) {
+            ytPlayer = new YT.Player('youtubePlayer', {
+                videoId: ytId,
+                playerVars: { 
+                    'autoplay': 1, 
+                    'controls': isHost ? 1 : 0, 
+                    'disablekb': 1, 
+                    'rel': 0 
+                },
+                events: { 'onStateChange': onYouTubePlayerStateChange }
+            });
         }
     } else if (driveId) {
-        // --- MODE GOOGLE DRIVE (OAUTH) ---
+        // --- MODE GOOGLE DRIVE ---
         isYouTube = false;
-        if (ytContainer) ytContainer.style.display = 'none';
-        if (ytPlayer && typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
-
         videoEl.style.display = 'block';
 
         if (userAccessToken) {
-            console.log("🎬 Streaming melalui Server Proxy Lokal dengan Token...");
+            console.log("🎬 Streaming Drive menggunakan Token Mandiri...");
+            // Merakit URL menggunakan token dari masing-masing peserta
+            const directStreamUrl = `https://www.googleapis.com/drive/v3/files/${driveId}?alt=media&acknowledgeAbuse=true&access_token=${userAccessToken}`;
             
-            // Arahkan video.src ke server_2.js milikmu
-            // Server akan mengambil video secara aman tanpa terkena blokir URL Token
-            videoEl.src = `/oauth-stream?id=${driveId}&token=${userAccessToken}`;
+            videoEl.src = directStreamUrl;
             videoEl.load();
-            
             let playPromise = videoEl.play();
             if (playPromise !== undefined) {
-                playPromise.catch(e => console.log("Menunggu interaksi Host untuk Autoplay..."));
+                playPromise.catch(e => console.log("Menunggu interaksi untuk Autoplay..."));
             }
         } else {
-            alert("⚠️ Kamu belum login Google. Meminta Host untuk melakukan sinkronisasi ulang.");
+            alert("⚠️ Kamu belum login Google. Akses video Drive ditolak.");
+        }
+    } else {
+        // --- MODE MP4 BIASA / UPLOAD LOKAL ---
+        isYouTube = false;
+        videoEl.style.display = 'block';
+        videoEl.src = url;
+        videoEl.load();
+        let playPromise = videoEl.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(e => console.log("Menunggu interaksi untuk Autoplay..."));
         }
     }
 }
 
 // ==========================================
-// 4. LOGIKA KONTROL HOST & SYNC VIEWER
+// 3. LOGIKA KONTROL HOST & SYNC VIEWER
 // ==========================================
+
+// Fungsi yang terhubung ke Tombol Ganti Video / Play
+function changeVideo() {
+    if (!isHost) {
+        alert("❌ Hanya Host yang bisa mengganti video!");
+        return;
+    }
+    
+    const inputEl = document.getElementById('streamUrl');
+    if (!inputEl) return;
+    
+    const rawUrl = inputEl.value.trim();
+    if (!rawUrl) {
+        alert('Masukkan link Google Drive atau YouTube!');
+        return;
+    }
+    
+    // KUNCI PERBAIKAN: Host menyiarkan URL mentah yang belum ditempeli token
+    socket.emit('change-video', rawUrl);
+    
+    // Host memuat video di layarnya sendiri
+    loadVideoUrl(rawUrl); 
+    inputEl.value = ''; 
+}
+
+// Peserta menerima instruksi ganti video dari Host
+socket.on('video-changed', (data) => {
+    // Menangani format lama dan baru (menghindari undefined URL)
+    const url = typeof data === 'string' ? data : data.url;
+    if (url) {
+        loadVideoUrl(url);
+    }
+});
+
+// Listener interaksi UI YouTube untuk Sinkronisasi
 function onYouTubePlayerStateChange(event) {
     if (!isHost || !isYouTube) return;
     const currentTime = ytPlayer.getCurrentTime();
@@ -1041,26 +1119,36 @@ function onYouTubePlayerStateChange(event) {
         socket.emit('play', { time: currentTime, serverTime: Date.now() });
     } else if (event.data === YT.PlayerState.PAUSED) {
         socket.emit('pause', { time: currentTime, serverTime: Date.now() });
+    } else if (event.data === YT.PlayerState.BUFFERING) {
+        socket.emit('waiting');
     }
 }
 
-// Fungsi ini dipanggil saat Host klik tombol "Play Video / Ganti Video"
-function changeVideo() {
-    if (!isHost) {
-        alert("❌ Hanya Host yang bisa mengganti video!");
-        return;
+// Sinkronisasi PLAY
+socket.on('play', (data) => {
+    if (isYouTube && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+        if (Math.abs(ytPlayer.getCurrentTime() - data.time) > 1.5) ytPlayer.seekTo(data.time, true);
+        ytPlayer.playVideo();
+    } else {
+        const videoEl = document.getElementById('videoPlayer');
+        if (videoEl && Math.abs(videoEl.currentTime - data.time) > 1.5) videoEl.currentTime = data.time;
+        if (videoEl) videoEl.play();
     }
-    const rawUrl = document.getElementById('streamUrl').value.trim();
-    if (!rawUrl) {
-        alert('Masukkan link Google Drive atau YouTube!');
-        return;
+});
+
+// Sinkronisasi PAUSE
+socket.on('pause', (data) => {
+    if (isYouTube && ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+        ytPlayer.pauseVideo();
+        ytPlayer.seekTo(data.time, true);
+    } else {
+        const videoEl = document.getElementById('videoPlayer');
+        if (videoEl) {
+            videoEl.pause();
+            videoEl.currentTime = data.time;
+        }
     }
-    
-    // Broadcast link ke semua teman di room
-    socket.emit('change-video', rawUrl);
-    loadVideoUrl(rawUrl); 
-    document.getElementById('streamUrl').value = ''; 
-}
+});
 
 function playStream() {
     if (!isHost) { showSystemMessage('⚠️ Hanya Host yang bisa memutar video!'); return; }
