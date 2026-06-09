@@ -4,9 +4,6 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
-ffmpeg.setFfmpegPath(ffmpegPath);
 
 const app = express();
 const server = http.createServer(app);
@@ -33,40 +30,6 @@ app.use(express.static('public'));
 // ============================================================
 // VIDEO TRANSCODE - OPTIMIZED FOR STREAMING
 // ============================================================
-
-function transcodeVideo(inputPath, outputPath, height, videoBitrate, audioBitrate) {
-    console.log(`Memulai kompresi ke ${height}p...`);
-    ffmpeg(inputPath)
-        .output(outputPath)
-        .videoCodec('libx264')
-        .videoFilters(`scale=-2:${height}`)
-        .videoBitrate(videoBitrate)
-        .audioCodec('aac')
-        .audioBitrate(audioBitrate)
-        .outputOptions([
-            '-movflags faststart',    // moov atom di depan — seek langsung tanpa download penuh
-            '-preset ultrafast',
-            '-tune fastdecode',       // optimalkan untuk decode cepat di client
-            '-g 48',                  // keyframe setiap 2 detik (24fps) — seek lebih akurat
-            '-sc_threshold 0',        // matikan scene-change keyframe — interval lebih konsisten
-            '-bf 0',                  // no B-frames — decode lebih cepat, seek lebih responsif
-            '-pix_fmt yuv420p',       // kompatibilitas maksimal semua browser/device
-        ])
-        .on('end', () => console.log(`Kompresi ${height}p selesai!`))
-        .on('error', (err) => console.error(`Gagal kompresi ${height}p:`, err.message))
-        .run();
-}
-
-app.post('/upload', upload.single('videoFile'), (req, res) => {
-    if (!req.file) return res.status(400).json({ success: false });
-    const filename = req.file.filename;
-    const ext = path.extname(filename);
-    const baseName = path.basename(filename, ext);
-    const inputPath = `./uploads/${filename}`;
-    transcodeVideo(inputPath, `./uploads/${baseName}_360p${ext}`, 360, '400k', '64k');
-    transcodeVideo(inputPath, `./uploads/${baseName}_144p${ext}`, 144, '100k', '32k');
-    res.json({ success: true, url: `/stream/${filename}` });
-});
 
 // ============================================================
 // VIDEO STREAMING - OPTIMIZED FOR CLOUDFLARE TUNNEL
@@ -109,22 +72,25 @@ function extractDriveFileId(url) {
 }
 
 // Resolve redirect chain dari Google Drive sampai dapat CDN URL yang sebenarnya
-// Menggunakan GET dengan follow redirect secara manual karena HEAD sering diblokir Google
+// Menggunakan GET + Range:bytes=0-0 karena Google sering memblokir HEAD request
 function resolveGDriveUrl(fileId) {
     return new Promise((resolve, reject) => {
-        // Coba beberapa format URL Google Drive
-        const candidateUrls = [
-            `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`,
+        const candidates = [
             `https://drive.usercontent.google.com/download?id=${fileId}&export=download&confirm=t`,
+            `https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`,
         ];
+        let attempt = 0;
 
-        let attempted = 0;
-
-        function tryUrl(url, depth) {
-            if (depth > 10) {
-                // Jika terlalu banyak redirect, kembalikan URL uc standar — proxy akan handle
+        function tryNext() {
+            if (attempt >= candidates.length) {
+                // Fallback terakhir: kembalikan URL uc standar, biarkan proxy ikuti redirect sendiri
                 return resolve(`https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`);
             }
+            followRedirect(candidates[attempt++], 0);
+        }
+
+        function followRedirect(url, depth) {
+            if (depth > 10) return resolve(url); // terlalu banyak redirect, pakai URL terakhir
 
             const parsed = new URL(url);
             const options = {
@@ -134,54 +100,39 @@ function resolveGDriveUrl(fileId) {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Accept': '*/*',
-                    'Range': 'bytes=0-0', // Request minimal untuk cek apakah URL valid
+                    'Range': 'bytes=0-0', // minimal request untuk cek validity
                 },
-                timeout: 15000,
+                timeout: 12000,
             };
 
             const req = https.request(options, (res) => {
-                // Consume body agar koneksi bisa ditutup
-                res.resume();
+                res.resume(); // buang body
 
                 if ((res.statusCode >= 301 && res.statusCode <= 308) && res.headers.location) {
                     let next = res.headers.location;
-                    if (!next.startsWith('http')) {
-                        next = `https://${parsed.hostname}${next}`;
-                    }
-                    // Jika sudah sampai ke CDN storage / usercontent, ini URL final
-                    if (next.includes('storage.googleapis.com') || next.includes('lh3.googleusercontent.com') || next.includes('drive.usercontent.google.com/download')) {
+                    if (!next.startsWith('http')) next = `https://${parsed.hostname}${next}`;
+                    // Jika sudah sampai CDN Google, ini URL final yang bisa di-stream
+                    if (next.includes('storage.googleapis.com') || next.includes('lh3.googleusercontent.com')) {
                         return resolve(next);
                     }
-                    tryUrl(next, depth + 1);
+                    followRedirect(next, depth + 1);
                 } else if (res.statusCode === 200 || res.statusCode === 206) {
                     const ct = res.headers['content-type'] || '';
-                    if (ct.includes('video') || ct.includes('octet-stream') || ct.includes('mp4')) {
-                        resolve(url);
+                    if (ct.includes('text/html')) {
+                        // Halaman confirm — coba candidate berikutnya
+                        tryNext();
                     } else {
-                        // Mungkin HTML confirm page — kembalikan URL ini, proxy akan ikuti redirect
                         resolve(url);
                     }
-                } else if (res.statusCode === 404 || res.statusCode === 403) {
-                    if (attempted < candidateUrls.length - 1) {
-                        attempted++;
-                        tryUrl(candidateUrls[attempted], 0);
-                    } else {
-                        reject(new Error(`HTTP ${res.statusCode} - File tidak dapat diakses. Pastikan file GDrive diset "Anyone with the link can view".`));
-                    }
+                } else if (res.statusCode === 403 || res.statusCode === 404) {
+                    tryNext();
                 } else {
-                    // Status lain — coba kembalikan URL asli dan biarkan proxy handle
+                    // Status lain — kembalikan URL ini, proxy akan handle
                     resolve(url);
                 }
             });
 
-            req.on('error', (err) => {
-                if (attempted < candidateUrls.length - 1) {
-                    attempted++;
-                    tryUrl(candidateUrls[attempted], 0);
-                } else {
-                    reject(err);
-                }
-            });
+            req.on('error', () => tryNext());
             req.on('timeout', () => {
                 req.destroy();
                 resolve(`https://drive.google.com/uc?export=download&id=${fileId}&confirm=t`);
@@ -189,7 +140,7 @@ function resolveGDriveUrl(fileId) {
             req.end();
         }
 
-        tryUrl(candidateUrls[0], 0);
+        tryNext();
     });
 }
 
@@ -220,9 +171,8 @@ app.get('/gdrive-stream', async (req, res) => {
         const range = req.headers.range;
         const parsedCdn = new URL(cdnUrl);
         const proxyHeaders = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'User-Agent': 'Mozilla/5.0',
             'Accept': '*/*',
-            'Cookie': req.headers.cookie || '', // teruskan cookie jika ada
         };
         if (range) proxyHeaders['Range'] = range;
 
@@ -234,14 +184,12 @@ app.get('/gdrive-stream', async (req, res) => {
         };
 
         const proxyReq = https.request(proxyOptions, (proxyRes) => {
-            // Handle redirect yang mungkin masih terjadi (Google Drive terkadang redirect ulang)
+            // Google terkadang masih redirect bahkan setelah resolve — hapus cache dan redirect client
             if ((proxyRes.statusCode >= 301 && proxyRes.statusCode <= 308) && proxyRes.headers.location) {
                 proxyRes.resume();
-                // Hapus cache karena URL sudah expired
-                driveUrlCache.delete(fileId);
-                // Redirect client ke endpoint ini lagi agar resolve ulang
-                const retryUrl = `/gdrive-stream?id=${fileId}&_t=${Date.now()}`;
-                return res.redirect(302, retryUrl);
+                driveUrlCache.delete(fileId); // hapus cache yang sudah expired
+                // Retry endpoint ini agar resolve ulang
+                return res.redirect(302, `/gdrive-stream?id=${fileId}&_r=${Date.now()}`);
             }
 
             const statusCode = proxyRes.statusCode;
@@ -285,6 +233,54 @@ app.post('/resolve-gdrive', express.json(), async (req, res) => {
     }
     // Kembalikan proxy URL — client stream lewat proxy ini
     res.json({ streamUrl: `/gdrive-stream?id=${fileId}`, fileId, isDrive: true });
+});
+
+// Endpoint OAuth Stream: GET /oauth-stream?id=FILE_ID&token=ACCESS_TOKEN
+// Proxy untuk streaming dengan OAuth token di header (bukan di URL)
+app.get('/oauth-stream', (req, res) => {
+    const fileId = req.query.id;
+    const token = req.query.token;
+
+    if (!fileId || !token) {
+        return res.status(400).send('Missing File ID or Token');
+    }
+
+    const options = {
+        hostname: 'www.googleapis.com',
+        path: `/drive/v3/files/${fileId}?alt=media&acknowledgeAbuse=true`,
+        method: 'GET',
+        headers: {
+            // DI SINI RAHASIANYA: Token dikirim secara aman lewat Header, bukan URL
+            'Authorization': `Bearer ${token}`, 
+            'User-Agent': 'Mozilla/5.0'
+        }
+    };
+
+    // Teruskan request pemotongan video (seeking) dari browser penonton
+    if (req.headers.range) {
+        options.headers['Range'] = req.headers.range;
+    }
+
+    const proxyReq = https.request(options, (proxyRes) => {
+        const headers = {
+            'Content-Type': proxyRes.headers['content-type'] || 'video/mp4',
+            'Accept-Ranges': 'bytes'
+        };
+        
+        if (proxyRes.headers['content-length']) headers['Content-Length'] = proxyRes.headers['content-length'];
+        if (proxyRes.headers['content-range']) headers['Content-Range'] = proxyRes.headers['content-range'];
+
+        res.writeHead(proxyRes.statusCode === 206 ? 206 : proxyRes.statusCode, headers);
+        proxyRes.pipe(res);
+    });
+
+    proxyReq.on('error', (err) => {
+        console.error('OAuth Proxy Error:', err);
+        if (!res.headersSent) res.status(500).end();
+    });
+
+    req.on('close', () => proxyReq.destroy());
+    proxyReq.end();
 });
 
 app.get('/stream/:filename', (req, res) => {
@@ -622,16 +618,14 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Selalu simpan raw URL asli — client yang akan resolve via /gdrive-stream proxy
-        // Jangan simpan URL googleapis.com langsung karena CORS + auth akan gagal di viewer
-        const rawUrl = data.url;
+        // Selalu simpan raw URL — client yang handle konversi ke proxy URL
+        const rawUrl = typeof data === 'string' ? data : data.url;
         room.state.url = rawUrl;
         room.state.time = 0;
         room.state.isPlaying = true;
         room.state.lastUpdate = Date.now();
 
-        // Broadcast ke SEMUA user di room termasuk host (pakai io.to, bukan socket.to)
-        // Ini penting: host sudah load videonya sendiri, tapi viewer lain perlu event ini
+        // Broadcast hanya ke viewer (socket.to), host sudah load sendiri via loadVideoUrl()
         socket.to(roomId).emit('video-changed', { url: rawUrl, serverTime: Date.now() });
         console.log(`🎬 Video changed in room ${roomId}: ${rawUrl}`);
     });
