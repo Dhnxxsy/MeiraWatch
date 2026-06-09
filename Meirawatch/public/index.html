@@ -36,12 +36,6 @@
                 </div>
 
                 <div class="bioskop-body">
-                    <!-- Google Login -->
-                    <div class="google-login-container" style="margin-bottom: 20px; text-align: center;">
-                        <p style="color: var(--text-muted); font-size: 13px;">Login dengan Google untuk melanjutkan:</p>
-                        <div id="googleSignInButton"></div>
-                    </div>
-
                     <!-- Movie Info -->
                     <div class="movie-info-card">
                         <div class="movie-poster">
@@ -83,6 +77,12 @@
                             <span class="btn-text">Pilih Kursi</span>
                             <span class="btn-icon">🎫</span>
                         </button>
+                    </div>
+
+                    <!-- Google Login -->
+                    <div class="google-login-container" style="margin-bottom: 20px; text-align: center; display: flex; flex-direction: column; align-items: center;">
+                        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 12px;">Login dengan Google untuk melanjutkan:</p>
+                        <div id="googleSignInButton" style="display: flex; justify-content: center;"></div>
                     </div>
 
                     <div class="support-trigger" id="supportTrigger" onclick="openSupportModal()">
